@@ -33,13 +33,13 @@ class SimpleTracker:
         while True:
             msg, frm = self.__recv__()
             msg, client = msg.decode(), "(\"%s\", %d)" % frm
-
             if msg.startswith("REGISTER:"):
                 # Client can use this to REGISTER a file and record it on the tracker
                 fid = msg[9:]
                 if fid not in self.files:
                     self.files[fid] = []
                 self.files[fid].append(client)
+                print("register success")
                 self.response("Success", frm)
 
             elif msg.startswith("QUERY:"):
@@ -48,11 +48,7 @@ class SimpleTracker:
                 result = []
                 for c in self.files[fid]:
                     result.append(c)
-                if len(result) == 1:
-                    peer = result[0]
-
-                else:
-                    pass
+                print("query success")
                 self.response("[%s]" % (", ".join(result)), frm)
 
             elif msg.startswith("CANCEL:"):
@@ -60,6 +56,7 @@ class SimpleTracker:
                 fid = msg[7:]
                 if client in self.files[fid]:
                     self.files[fid].remove(client)
+                print('cancel success')
                 self.response("Success", frm)
 
 
