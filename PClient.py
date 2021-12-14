@@ -69,7 +69,7 @@ class PClient:
     def download(self, fid) -> bytes:
         """
         Download a file from P2P network using its unique identification
-        :param fid: the unique identification of the expected file, should be the same type of the return value of share()
+        :param fid: the unique identification of the expected file, should be the same type of the return value of register()
         :return: the whole received file in bytes
         """
         data = None
