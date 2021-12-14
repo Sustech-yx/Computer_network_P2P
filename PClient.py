@@ -2,13 +2,10 @@ import time
 
 from Proxy import Proxy
 import hashlib
-import threading
 
 
-class PClient(threading.Thread):
+class PClient:
     def __init__(self, tracker_addr: (str, int), proxy=None, port=None, upload_rate=0, download_rate=0):
-        super().__init__()
-        self.isClose = False
         if proxy:
             self.proxy = proxy
         else:
@@ -18,12 +15,9 @@ class PClient(threading.Thread):
         Start your additional code below!
         """
         self.fid_addr_dict = {}
-        self.start()
 
-    def run(self) -> None:
-        while not self.isClose:
-            time.sleep(1)
-            print("run")
+
+
 
     def __send__(self, data: bytes, dst: (str, int)):
         """
@@ -51,20 +45,22 @@ class PClient(threading.Thread):
         :return: fid, which is a unique identification of the shared file and can be used by other PClients to
                  download this file, such as a _hash code of it
         """
+        fid = None
         """
         Start your code below!
         """
+        time.sleep(0.0001)
         file = open(file_path, 'rb')
         _hash = hashlib.md5()
         for line in file:
             _hash.update(line)
-        fid = 'REGISTER:' + str(_hash.hexdigest())
-        # print(fid)
+        fid = str(_hash.hexdigest())
+        self.fid_addr_dict[fid] = file_path
+        fid = 'REGISTER:' + fid
         fid = fid.encode()
         self.__send__(fid, self.tracker)
-        self.fid_addr_dict[fid] = file_path
         file.close()
-        time.sleep(0.000001)
+        time.sleep(0.0001)
         """
         End of your code
         """
@@ -83,22 +79,23 @@ class PClient(threading.Thread):
         fid = fid.decode()
         if fid.startswith('REGISTER:'):
             fid = fid[9:]
+        time.sleep(0.0001)
         fid = 'QUERY:' + str(fid)
         fid = fid.encode()
         self.__send__(fid, self.tracker)
+        fid = fid.decode()
+        fid = fid[6:]
         data = self.__recv__()
+        fid = 'REGISTER:' + str(fid)
+        fid = fid.encode()
+        self.__send__(fid, self.tracker)
 
-        time.sleep(0.000001)
+
 
         """
         End of your code
         """
         return data
-
-
-    def share(self):
-        pass
-
 
     def cancel(self, fid):
         """
@@ -106,8 +103,16 @@ class PClient(threading.Thread):
         :param fid: the unique identification of the file to be canceled register on the Tracker
         :return: You can design as your need
         """
-
-        pass
+        time.sleep(0.0001)
+        fid = fid.decode()
+        self.fid_addr_dict.pop(fid)
+        if fid.startswith('REGISTER:'):
+            fid = fid[9:]
+        time.sleep(0.0001)
+        fid = 'CANCEL:' + str(fid)
+        fid = fid.encode()
+        self.__send__(fid, self.tracker)
+        time.sleep(0.0001)
 
         """
         End of your code
@@ -118,8 +123,18 @@ class PClient(threading.Thread):
         Completely stop the client, this client will be unable to share or download files any more
         :return: You can design as your need
         """
-        pass
-        self.isClose = True
+        time.sleep(0.0001)
+        for i in self.fid_addr_dict:
+            time.sleep(0.0001)
+            time.sleep(0.0001)
+            fid = i
+            time.sleep(0.0001)
+            fid = 'CANCEL:' + str(fid)
+            fid = fid.encode()
+            self.__send__(fid, self.tracker)
+            time.sleep(0.0001)
+            time.sleep(0.0001)
+        self.fid_addr_dict.clear()
         """
         End of your code
         """
