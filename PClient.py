@@ -55,13 +55,23 @@ class PClient:
             fid = msg.decode()
             msg = self.fid_addr_dict[fid]
             print("%s:%d ask for %s" % (frm[0], frm[1], msg))
+
+            data = str(msg)
+            packets = [data[i * self.packet_size: (i + 1) * self.packet_size]
+                       for i in range(len(data) // self.packet_size + 1)]
+            self.proxy.sendto(str(len(packets)).encode(), frm)
+            for packet in packets:
+                self.proxy.sendto(packet.encode(), frm)
+
+            time.sleep(1)
+
             with open("%s" % msg, 'rb') as f:
                 data = f.read()
 
             packets = [data[i * self.packet_size: (i + 1) * self.packet_size]
                        for i in range(len(data) // self.packet_size + 1)]
             self.proxy.sendto(str(len(packets)).encode(), frm)
-            print("Total length of %s is %d bytes, %d packets" % (msg, len(data), len(packets)))
+            # print("Total length of %s is %d bytes, %d packets" % (msg, len(data), len(packets)))
             for packet in packets:
                 self.proxy.sendto(packet, frm)
 
@@ -107,6 +117,7 @@ class PClient:
         """
         Start your code below!
         """
+        time.sleep(0.001)
         self.active = False
         fid = fid.decode()
         if fid.startswith('REGISTER:'):
@@ -117,31 +128,43 @@ class PClient:
         self.__send__(fid, self.tracker)
         fid = fid.decode()
         fid = fid[6:]
-        data_t = self.__recv__()
+        data_t = self.__recv__(1)
         data_addr = data_t[0].decode()
         data_addr_1 = (str(data_addr[3:12]), int(data_addr[15:20]))
-        print(data_addr_1)
+        # print(data_addr_1)
 
         time.sleep(0.0001)
         self.__send__(fid.encode(), data_addr_1)
         time.sleep(0.0001)
         msg, frm = self.proxy.recvfrom()
-        print(msg)
+        # print(msg)
 
         data = b""
         for idx in range(int(msg.decode())):
             msg, frm = self.__recv__()
             data += msg
-            print("%s receive %d" % (self.proxy.port, idx))
+            # print("%s receive %d" % (self.proxy.port, idx))
+
+        self.fid_addr_dict[fid] = data.decode()
+
+        msg, frm = self.proxy.recvfrom()
+        data = b""
+        for idx in range(int(msg.decode())):
+            msg, frm = self.__recv__()
+            data += msg
+            # print("%s receive %d" % (self.proxy.port, idx))
 
         # print(data)
-        
+
+        # print(self.fid_addr_dict[fid])
+
 
         fid = 'REGISTER:' + str(fid)
         fid = fid.encode()
         self.__send__(fid, self.tracker)
 
 
+        time.sleep(0.001)
         self.active = True
         """
         End of your code
