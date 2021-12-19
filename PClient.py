@@ -47,7 +47,7 @@ class PClient:
         time.sleep(1)
         while self.active:
             try:
-                msg, frm = self.__recv__()
+                msg, frm = self.__recv__(10)
             except Exception:
                 continue
             if frm == ('127.0.0.1', 10086):
