@@ -1,3 +1,4 @@
+import threading
 import time
 
 from Proxy import Proxy
@@ -46,8 +47,7 @@ class PClient:
         time.sleep(1)
         while self.active:
             try:
-                msg, frm = self.proxy.recvfrom()
-                print(msg, self.proxy.port, frm)
+                msg, frm = self.__recv__()
             except Exception:
                 continue
             if frm == ('127.0.0.1', 10086):
@@ -113,11 +113,11 @@ class PClient:
         :param fid: the unique identification of the expected file, should be the same type of the return value of register()
         :return: the whole received file in bytes
         """
-        data = None
         """
         Start your code below!
         """
         time.sleep(0.001)
+        del self.tthread
         self.active = False
         fid = fid.decode()
         if fid.startswith('REGISTER:'):
@@ -126,9 +126,9 @@ class PClient:
         fid = 'QUERY:' + str(fid)
         fid = fid.encode()
         self.__send__(fid, self.tracker)
+        data_t = self.__recv__()
         fid = fid.decode()
         fid = fid[6:]
-        data_t = self.__recv__(1)
         data_addr = data_t[0].decode()
         data_addr_1 = (str(data_addr[3:12]), int(data_addr[15:20]))
         # print(data_addr_1)
@@ -157,15 +157,17 @@ class PClient:
         # print(data)
 
         # print(self.fid_addr_dict[fid])
+        self.active = True
+        self.tthread = Thread(target=self.transfer_thread)
+        self.tthread.start()
 
-
+        time.sleep(0.0001)
         fid = 'REGISTER:' + str(fid)
         fid = fid.encode()
         self.__send__(fid, self.tracker)
-
+        time.sleep(0.0001)
 
         time.sleep(0.001)
-        self.active = True
         """
         End of your code
         """
@@ -212,8 +214,9 @@ class PClient:
         """
         End of your code
         """
-        self.proxy.close()
         self.active = False
+        self.proxy.close()
+        del self.tthread
 
 
 if __name__ == '__main__':
