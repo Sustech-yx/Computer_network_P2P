@@ -15,6 +15,10 @@ if __name__ == '__main__':
 
     # C join the network and download the file from B
     C = PClient(tracker_address, upload_rate=100000, download_rate=100000)
+    print('A', A)
+    print('B', B)
+    print('C', C)
+
     data2 = C.download(fid)
 
     if data1 == data2:
