@@ -44,10 +44,10 @@ class PClient:
 
 
     def transfer_thread(self):
-        time.sleep(1)
+        time.sleep(0.1)
         while self.active:
             try:
-                msg, frm = self.__recv__(10)
+                msg, frm = self.__recv__(5)
             except Exception:
                 continue
             if frm == ('127.0.0.1', 10086):
