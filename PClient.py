@@ -1,6 +1,4 @@
-import threading
 import time
-
 from Proxy import Proxy
 import hashlib
 from threading import Thread
@@ -18,10 +16,11 @@ class PClient:
         """
         self.fid_addr_dict = {}
 
-        self.packet_size = 1024
+        self.packet_size = 3072
         self.active = True
         self.tthread = Thread(target=self.transfer_thread)
         self.tthread.start()
+        self.try_to_send = {}
 
     def __send__(self, data: bytes, dst: (str, int)):
         """
@@ -47,33 +46,46 @@ class PClient:
         time.sleep(0.1)
         while self.active:
             try:
-                msg, frm = self.__recv__(5)
+                msg, frm = self.__recv__(1)
             except Exception:
                 continue
             if frm == ('127.0.0.1', 10086):
                 continue
             fid = msg.decode()
-            msg = self.fid_addr_dict[fid]
-            print("%s:%d ask for %s" % (frm[0], frm[1], msg))
+            # print(fid)
+            fid1 = str(fid).split(' ')
+            count = int(fid1[1])
+            # print(count)
+            print("%s:%d ask %s for %s in" % (frm[0], frm[1], self.proxy.port, fid1[0]), count)
+            if count == 0:
+                msg = self.fid_addr_dict[fid1[0]]
+                self.proxy.sendto(msg.encode(), frm)
 
-            data = str(msg)
-            packets = [data[i * self.packet_size: (i + 1) * self.packet_size]
-                       for i in range(len(data) // self.packet_size + 1)]
-            self.proxy.sendto(str(len(packets)).encode(), frm)
-            for packet in packets:
-                self.proxy.sendto(packet.encode(), frm)
+                with open("%s" % msg, 'rb') as f:
+                    data = f.read()
+                if fid1[0] not in self.try_to_send:
+                    packets = [data[i * self.packet_size: (i + 1) * self.packet_size]
+                               for i in range(len(data) // self.packet_size + 1)]
+                    self.try_to_send[fid1[0]] = packets
+                    self.proxy.sendto(str(len(packets)).encode(), frm)
+                else:
+                    self.proxy.sendto(str(len(self.try_to_send[fid1[0]])).encode(), frm)
 
-            time.sleep(1)
-
-            with open("%s" % msg, 'rb') as f:
-                data = f.read()
-
-            packets = [data[i * self.packet_size: (i + 1) * self.packet_size]
-                       for i in range(len(data) // self.packet_size + 1)]
-            self.proxy.sendto(str(len(packets)).encode(), frm)
-            # print("Total length of %s is %d bytes, %d packets" % (msg, len(data), len(packets)))
-            for packet in packets:
-                self.proxy.sendto(packet, frm)
+                # print("Total length of %s is %d bytes, %d packets" % (msg, len(data), len(packets)))
+                # self.proxy.sendto(len(packets), frm)
+                for i in range(count, len(self.try_to_send[fid1[0]])):
+                    # print(self.fid_addr_dict)
+                    if fid1[0] in self.fid_addr_dict:
+                        self.proxy.sendto(self.try_to_send[fid1[0]][i], frm)
+                    else:
+                        break
+            else:
+                # print(self.try_to_send[fid1[0]])
+                for i in range(count, len(self.try_to_send[fid1[0]])):
+                    if fid1[0] in self.fid_addr_dict:
+                        self.proxy.sendto(self.try_to_send[fid1[0]][i], frm)
+                    else:
+                        break
 
 
 
@@ -113,61 +125,65 @@ class PClient:
         :param fid: the unique identification of the expected file, should be the same type of the return value of register()
         :return: the whole received file in bytes
         """
+        data = None
         """
         Start your code below!
         """
+        print(self.proxy.port, 'start')
         time.sleep(0.001)
-        del self.tthread
         self.active = False
         fid = fid.decode()
         if fid.startswith('REGISTER:'):
             fid = fid[9:]
         time.sleep(0.0001)
-        fid = 'QUERY:' + str(fid)
-        fid = fid.encode()
-        self.__send__(fid, self.tracker)
-        data_t = self.__recv__()
-        fid = fid.decode()
-        fid = fid[6:]
-        data_addr = data_t[0].decode()
-        data_addr_1 = (str(data_addr[3:12]), int(data_addr[15:20]))
+        fid_ori = 'QUERY:' + str(fid)
+        fid_ori = fid_ori.encode()
         # print(data_addr_1)
+        count = 0
+        stop = 1
 
-        time.sleep(0.0001)
-        self.__send__(fid.encode(), data_addr_1)
-        time.sleep(0.0001)
-        msg, frm = self.proxy.recvfrom()
-        # print(msg)
+        while count < stop:
+            print(1111111111)
+            self.__send__(fid_ori, self.tracker)
+            data_t = self.__recv__()
+            data_addr = data_t[0].decode()
+            data_addr_1 = (str(data_addr[3:12]), int(data_addr[15:20]))
+            fid1 = fid + ' ' + str(count)
+            time.sleep(0.0001)
+            self.__send__(fid1.encode(), data_addr_1)
+            time.sleep(0.0001)
+            # print(msg)
+            if count == 0:
+                data = b""
+                msg, frm = self.__recv__()
+                data += msg
+                # print("%s receive %d" % (self.proxy.port, idx))
 
-        data = b""
-        for idx in range(int(msg.decode())):
-            msg, frm = self.__recv__()
-            data += msg
-            # print("%s receive %d" % (self.proxy.port, idx))
+                self.fid_addr_dict[fid] = data.decode()
+                data = b""
+                msg, frm = self.__recv__()
+                stop = int(msg.decode())
+            while count < stop:
+                try:
+                    msg, frm = self.__recv__(5)
+                except Exception:
+                    print('error')
+                    break
+                data += msg
+                count += 1
 
-        self.fid_addr_dict[fid] = data.decode()
-
-        msg, frm = self.proxy.recvfrom()
-        data = b""
-        for idx in range(int(msg.decode())):
-            msg, frm = self.__recv__()
-            data += msg
-            # print("%s receive %d" % (self.proxy.port, idx))
-
-        # print(data)
-
-        # print(self.fid_addr_dict[fid])
         self.active = True
         self.tthread = Thread(target=self.transfer_thread)
         self.tthread.start()
 
         time.sleep(0.0001)
-        fid = 'REGISTER:' + str(fid)
+        fid = 'REGISTER:' + str(fid_ori)
         fid = fid.encode()
         self.__send__(fid, self.tracker)
         time.sleep(0.0001)
 
         time.sleep(0.001)
+        print('Finish')
         """
         End of your code
         """
@@ -181,9 +197,9 @@ class PClient:
         """
         time.sleep(0.0001)
         fid = fid.decode()
-        self.fid_addr_dict.pop(fid)
         if fid.startswith('REGISTER:'):
             fid = fid[9:]
+        del self.fid_addr_dict[fid]
         time.sleep(0.0001)
         fid = 'CANCEL:' + str(fid)
         fid = fid.encode()
@@ -216,7 +232,6 @@ class PClient:
         """
         self.active = False
         self.proxy.close()
-        del self.tthread
 
 
 if __name__ == '__main__':
