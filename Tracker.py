@@ -4,6 +4,7 @@ from Proxy import Proxy
 class Tracker:
     def __init__(self, upload_rate=10000, download_rate=10000, port=None):
         self.proxy = Proxy(upload_rate, download_rate, port)
+        self.files = {}
 
     def __send__(self, data: bytes, dst: (str, int)):
         """
@@ -24,11 +25,46 @@ class Tracker:
         """
         return self.proxy.recvfrom(timeout)
 
+    def response(self, data: str, address: (str, int)):
+        self.__send__(data.encode(), address)
+
     def start(self):
         """
         Start the Tracker and it will work forever
         :return: None
         """
+        while 1:
+            msg, frm = self.__recv__()
+            msg, client = msg.decode(), "(\"%s\", %d)" % frm
+            header = msg[0:3]
+            if header[0] == '0':
+                continue
+            else:
+                if header[1:3] == '00':  # register
+                    fid = msg[3:]
+                    if fid not in self.files:
+                        self.files[fid] = []
+                    self.files[fid].append(client)
+                    self.response("regSuccess", frm)
+                elif header[1:3] == '01':  # query
+                    fid = msg[3:]
+                    if fid not in self.files or len(self.files[fid]) == 0:
+                        self.response("No peer", frm)
+                    else:
+                        result = []
+                        for c in self.files[fid]:
+                            result.append(c)
+                        self.response('fid' + fid + "%s" % ("|".join(result)), frm)
+                elif header[1:3] == '10':  # cancel
+                    fid = msg[3:]
+                    if client in self.files[fid]:
+                        self.files[fid].remove(client)
+                    self.response("canSuccess", frm)
+                elif header[1:3] == '--':  # close
+                    for fid, clients in self.files:
+                        if client in clients:
+                            self.files[fid].remove(client)
+                    self.response("cloSuccess", frm)
         pass
 
 

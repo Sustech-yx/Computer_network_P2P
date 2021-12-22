@@ -3,6 +3,7 @@ from socket import *
 from threading import Thread
 from queue import SimpleQueue
 import random
+from config import *
 
 
 def get_socket(port):
