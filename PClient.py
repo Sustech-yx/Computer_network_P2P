@@ -16,7 +16,7 @@ class PClient:
         """
         self.fid_addr_dict = {}
 
-        self.packet_size = 3072
+        self.packet_size = 65000
         self.active = True
         self.tthread = Thread(target=self.transfer_thread)
         self.tthread.start()
@@ -51,41 +51,51 @@ class PClient:
                 continue
             if frm == ('127.0.0.1', 10086):
                 continue
-            fid = msg.decode()
+            try:
+                fid = msg.decode()
+            except Exception:
+                continue
             # print(fid)
             fid1 = str(fid).split(' ')
-            count = int(fid1[1])
+            try:
+                count = int(fid1[1])
+            except Exception:
+                continue
             # print(count)
             print("%s:%d ask %s for %s in" % (frm[0], frm[1], self.proxy.port, fid1[0]), count)
-            if count == 0:
+            try:
                 msg = self.fid_addr_dict[fid1[0]]
-                self.proxy.sendto(msg.encode(), frm)
+            except Exception:
+                continue
+            if fid1[0] not in self.try_to_send:
+                with open("%s" % msg, 'rb') as f:
+                    data = f.read()
+                packets = [data[i * self.packet_size: (i + 1) * self.packet_size]
+                           for i in range(len(data) // self.packet_size + 1)]
+                self.try_to_send[fid1[0]] = packets
 
-                if fid1[0] not in self.try_to_send:
-                    with open("%s" % msg, 'rb') as f:
-                        data = f.read()
-                    packets = [data[i * self.packet_size: (i + 1) * self.packet_size]
-                               for i in range(len(data) // self.packet_size + 1)]
-                    self.try_to_send[fid1[0]] = packets
-                    self.proxy.sendto(str(len(packets)).encode(), frm)
-                else:
-                    self.proxy.sendto(str(len(self.try_to_send[fid1[0]])).encode(), frm)
+            if count == 0:
+                time.sleep(0.0001)
+                self.proxy.sendto(msg.encode(), frm)
+                time.sleep(0.0001)
+                self.proxy.sendto(str(len(self.try_to_send[fid1[0]])).encode(), frm)
 
                 # print("Total length of %s is %d bytes, %d packets" % (msg, len(data), len(packets)))
                 # self.proxy.sendto(len(packets), frm)
-                for i in range(count, len(self.try_to_send[fid1[0]])):
-                    # print(self.fid_addr_dict)
-                    if fid1[0] in self.fid_addr_dict:
-                        self.proxy.sendto(self.try_to_send[fid1[0]][i], frm)
-                    else:
-                        break
+
+                if fid1[0] in self.fid_addr_dict:
+                    self.proxy.sendto(self.try_to_send[fid1[0]][count], frm)
+                else:
+                    continue
             else:
-                # print(self.try_to_send[fid1[0]])
-                for i in range(count, len(self.try_to_send[fid1[0]])):
+                try:
                     if fid1[0] in self.fid_addr_dict:
-                        self.proxy.sendto(self.try_to_send[fid1[0]][i], frm)
+                        self.proxy.sendto(self.try_to_send[fid1[0]][count], frm)
                     else:
-                        break
+                        continue
+                except Exception:
+                    continue
+                # print(self.try_to_send[fid1[0]])
 
 
 
@@ -141,6 +151,7 @@ class PClient:
         # print(data_addr_1)
         count = 0
         stop = 1
+        flag = False
 
         while count < stop:
             self.__send__(fid_ori, self.tracker)
@@ -164,11 +175,20 @@ class PClient:
                 data = b""
                 msg, frm = self.__recv__()
                 stop = int(msg.decode())
+                msg, frm = self.__recv__()
+                data += msg
+                count += 1
             while count < stop:
+                if flag:
+                    flag = False
+                    msg, frm = self.__recv__(5)
                 try:
+                    fid1 = fid + ' ' + str(count)
+                    self.__send__(fid1.encode(), data_addr_1)
                     msg, frm = self.__recv__(5)
                 except Exception:
                     # print('error')
+                    flag = True
                     break
                 data += msg
                 count += 1
