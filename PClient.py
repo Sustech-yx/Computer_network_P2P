@@ -178,7 +178,7 @@ class PClient:
         self.tthread.start()
 
         time.sleep(0.0001)
-        fid = 'REGISTER:' + str(fid_ori)
+        fid = 'REGISTER:' + str(fid_ori[6:].decode())
         fid = fid.encode()
         self.__send__(fid, self.tracker)
         time.sleep(0.0001)
