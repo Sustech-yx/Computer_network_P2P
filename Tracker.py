@@ -60,12 +60,12 @@ class Tracker:
                     fid = msg[3:]
                     if client in self.files[fid]:
                         self.files[fid].remove(client)
-                    self.response("canSuccess", frm)
+                    self.response('canSuccess', frm)
                 elif header[1:3] == '--':  # close
-                    for fid, clients in self.files:
+                    for fid, clients in self.files.items():
                         if client in clients:
                             self.files[fid].remove(client)
-                    self.response("cloSuccess", frm)
+                    self.response('cloSuccess', frm)
         pass
 
 
