@@ -45,6 +45,7 @@ class PClient:
     def transfer_thread(self):
         time.sleep(0.1)
         while self.active:
+            # try 和 except 是防止接听自己是出错
             try:
                 msg, frm = self.__recv__(1)
             except Exception:
@@ -75,6 +76,7 @@ class PClient:
                 self.try_to_send[fid1[0]] = packets
 
             if count == 0:
+                # 发送第一个包，同时发送总长并保存packets
                 time.sleep(0.0001)
                 self.proxy.sendto(msg.encode(), frm)
                 time.sleep(0.0001)
@@ -88,6 +90,7 @@ class PClient:
                 else:
                     continue
             else:
+                # 正常传送
                 try:
                     if fid1[0] in self.fid_addr_dict:
                         self.proxy.sendto(self.try_to_send[fid1[0]][count], frm)
@@ -151,7 +154,7 @@ class PClient:
         # print(data_addr_1)
         count = 0
         stop = 1
-        flag = False
+        flag = False # 防止换人传时的重复传输
 
         while count < stop:
             self.__send__(fid_ori, self.tracker)
@@ -166,6 +169,7 @@ class PClient:
             time.sleep(0.0001)
             # print(msg)
             if count == 0:
+                # 乞求第一个包
                 data = b""
                 msg, frm = self.__recv__()
                 data += msg
@@ -182,6 +186,7 @@ class PClient:
                 if flag:
                     flag = False
                     msg, frm = self.__recv__(5)
+                # 时间到了就换人
                 try:
                     fid1 = fid + ' ' + str(count)
                     self.__send__(fid1.encode(), data_addr_1)
