@@ -1,5 +1,6 @@
 import time
 from threading import Thread
+import threading
 
 from PClient import PClient
 from SC_model.client import Client
@@ -66,3 +67,4 @@ if __name__ == '__main__':
         t.join()
     print(f"Time of SC model: {(time.time_ns() - time_start) * 1e-9}")
     server.close()
+    print(threading.enumerate())

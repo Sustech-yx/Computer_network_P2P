@@ -10,7 +10,7 @@ from copy import deepcopy as cp
 
 
 class PClient:
-    pkg_size = 16384
+    pkg_size = 32768
 
     def __init__(self, tracker_addr: (str, int), proxy=None, port=None, upload_rate=0, download_rate=0):
         if proxy:
