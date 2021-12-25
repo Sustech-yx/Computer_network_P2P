@@ -61,9 +61,9 @@ class PClient:
                 msg = self.fid_addr_dict[fid1[0]]
                 self.proxy.sendto(msg.encode(), frm)
 
-                with open("%s" % msg, 'rb') as f:
-                    data = f.read()
                 if fid1[0] not in self.try_to_send:
+                    with open("%s" % msg, 'rb') as f:
+                        data = f.read()
                     packets = [data[i * self.packet_size: (i + 1) * self.packet_size]
                                for i in range(len(data) // self.packet_size + 1)]
                     self.try_to_send[fid1[0]] = packets
@@ -143,10 +143,11 @@ class PClient:
         stop = 1
 
         while count < stop:
-            print(1111111111)
             self.__send__(fid_ori, self.tracker)
             data_t = self.__recv__()
             data_addr = data_t[0].decode()
+            if str(data_addr) == '[]':
+                continue
             data_addr_1 = (str(data_addr[3:12]), int(data_addr[15:20]))
             fid1 = fid + ' ' + str(count)
             time.sleep(0.0001)
@@ -167,7 +168,7 @@ class PClient:
                 try:
                     msg, frm = self.__recv__(5)
                 except Exception:
-                    print('error')
+                    # print('error')
                     break
                 data += msg
                 count += 1
