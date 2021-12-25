@@ -44,7 +44,8 @@ class Tracker:
                     fid = msg[3:]
                     if fid not in self.files:
                         self.files[fid] = []
-                    self.files[fid].append(client)
+                    if client not in self.files[fid]:
+                        self.files[fid].append(client)
                     self.response("regSuccess", frm)
                 elif header[1:3] == '01':  # query
                     fid = msg[3:]

@@ -4,9 +4,13 @@ import hashlib
 from threading import Thread
 import time
 from queue import SimpleQueue
+import re
+import os
 
 
 class PClient:
+    pkg_size = 2048
+
     def __init__(self, tracker_addr: (str, int), proxy=None, port=None, upload_rate=0, download_rate=0):
         if proxy:
             self.proxy = proxy
@@ -14,6 +18,13 @@ class PClient:
             self.proxy = Proxy(upload_rate, download_rate, port)  # Do not modify this line!
         self.tracker = tracker_addr
         self.fid_file_dict = {}
+        self.download_buffer = {}
+        # the key is the fid, and the value is a list of tuple, the first element of the
+        # is the sequence number, and the second element of the tuple is data.
+        self.download_progress = {}
+        # the key is the fid, and the value is a dict of boolean which specify whether the
+        # peer has complete them task
+
         self.tracker_msg = SimpleQueue()
         self.clients_msg = SimpleQueue()
         self.activate = True
@@ -28,7 +39,7 @@ class PClient:
     def __listen__(self):
         while self.activate:
             try:
-                msg, frm = self.__recv__(sleep_time)
+                msg, frm = self.__recv__(10 * sleep_time)
             except TimeoutError:
                 time.sleep(sleep_time)
                 continue
@@ -37,6 +48,12 @@ class PClient:
                 self.tracker_msg.put(msg)
             else:
                 self.clients_msg.put(msg)
+
+    def __send_pkg__(self, fid: str, dst: (str, int), index: int):
+        pass
+
+    def __recv_pkg__(self, fid: str, dst: (str, int), index: int):
+        pass
 
     def __send__(self, data: bytes, dst: (str, int)):
         """
@@ -58,6 +75,7 @@ class PClient:
         return self.proxy.recvfrom(timeout)
 
     def getRespond(self, tp, **kwargs):
+        msg = None
         if tp == 0:
             hasRespond = False
             while not hasRespond:
@@ -76,7 +94,22 @@ class PClient:
                             else:
                                 pass
                         self.tracker_msg.put(msg)
-
+        elif tp == 1:  # reg
+            if self.tracker_msg.empty():
+                pass
+            else:
+                while 1:
+                    msg = self.tracker_msg.get()
+                    if not msg.startswith('reg'):
+                        pass
+                    else:
+                        temp = msg[3:]
+                        if temp == 'Success':
+                            break
+                        else:
+                            pass
+                    self.tracker_msg.put(msg)
+        return msg
 
     def register(self, file_path: str):
         """
@@ -90,11 +123,15 @@ class PClient:
         for line in file:
             _hash.update(line)
         fid = str(_hash.hexdigest())
-        self.fid_file_dict[fid] = file_path
+        self.fid_file_dict[fid] = (file_path, os.path.getsize(file_path))
         msg = '100' + fid
         msg = msg.encode()
         self.__send__(msg, self.tracker)
-
+        res = self.getRespond(1)
+        while res is None:
+            self.__send__(msg, self.tracker)
+            time.sleep(sleep_time)
+            res = self.getRespond(1)
         return fid
 
     def download(self, fid) -> bytes:
@@ -106,25 +143,23 @@ class PClient:
         msg = '101' + fid
         msg = msg.encode()
         self.__send__(msg, self.tracker)
-        hasRespond = False
-        while not hasRespond:
-            if self.tracker_msg.empty():
-                continue
-            else:
-                while 1:
-                    msg = self.tracker_msg.get()
-                    if not msg.startswith('fid'):
-                        pass
-                    else:
-                        res_fid = msg[3:35]
-                        if res_fid == fid:
-                            hasRespond = True
-                            break
-                        else:
-                            pass
-                    self.tracker_msg.put(msg)
-        addresses = msg[35:]
-        print(addresses)
+        res = self.getRespond(0, fid=fid)
+        temp = res[35:]
+        temp = temp.split('|')
+        addresses = []
+        for address in temp:
+            t = address.replace(' ', '').replace('(', '').replace(')', '').replace('"', '').split(',')
+            addresses.append((str(t[0]), int(t[1])))
+        del address
+        num_of_peer = len(addresses)
+        self.download_buffer[fid] = []
+        self.download_progress[fid] = {}
+
+        for index, peer in enumerate(addresses):
+            self.download_progress[fid][peer[1]] = False
+            Thread(target=self.__recv_pkg__, kwargs={'fid': fid, 'dst': peer, 'index': index}).start()
+        del self.download_buffer[fid]
+        del self.download_progress[fid]
         return None
 
     def cancel(self, fid):
@@ -149,5 +184,11 @@ class PClient:
         self.proxy.close()
 
 
+def __foo__(t):
+    while 1:
+        print(t)
+
+
 if __name__ == '__main__':
-    pass
+    for i in range(10):
+        Thread(target=__foo__, kwargs={'t': i}).start()
