@@ -104,6 +104,22 @@ class PClient:
         if debug:
             print(f'Task to {dst} has complete')
 
+    def __update_addresses__(self, fid):
+        while not self.download_flag[fid]:
+            time.sleep(address_split_time)
+            msg = '101' + fid
+            msg = msg.encode()
+            self.__send__(msg, self.tracker)
+            res = self._getRespond(0, fid=fid)
+            temp = res[35:]
+            temp = temp.split('|')
+            addresses = []
+            for address in temp:
+                t = address.replace(' ', '').replace('(', '').replace(')', '').replace('"', '').split(',')
+                addresses.append((str(t[0]), int(t[1])))
+            del address
+            self.download_addresses[fid] = addresses
+
     def __recv_pkg__(self, fid: str, dst: (str, int), index: int, total_peer_cnt=1):
         request_pkg = 'request0' + fid
         # request for the information of the file
@@ -391,7 +407,7 @@ class PClient:
             addresses.append((str(t[0]), int(t[1])))
         del address
         # get all the addresses
-        num_of_peer = len(addresses)
+        # num_of_peer = len(addresses)
         self.download_buffer[fid] = []
         self.download_addresses[fid] = addresses
         dst = self.download_addresses[fid][0]
@@ -414,6 +430,8 @@ class PClient:
         self.download_progress[fid] = []
         for index in range(package_cnt):
             self.download_progress[fid].append(index)
+
+        Thread(target=self.__update_addresses__, args=fid).start()  # this thread is used to update the address table
 
         while 1:
             receive_threads = []
