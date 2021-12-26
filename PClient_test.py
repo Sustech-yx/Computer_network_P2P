@@ -166,16 +166,20 @@ class PClient:
         while ack:
             start = time.time()
             self.__send__(fid_ori, self.tracker)
-            data_t = self.__recv__()
+            try:
+                data_t = self.__recv__(2)
+            except:
+                continue
             data_addr = data_t[0].decode()
-            if str(data_addr) == '[]':
+            if str(data_addr) == '[]' or len(str(data_addr)) > 100:
                 continue
             index = 0
             data_addr_1 = []
+            print(data_addr)
             while index + 20 < len(str(data_addr)):
                 data_addr_1.append((str(data_addr[index + 3:index + 12]), int(data_addr[index + 15:index + 20])))
                 index += 22
-            print(self.proxy.port, data_addr_1)
+            # print(self.proxy.port, data_addr_1)
             if count == 0:
                 fid1 = fid + ' ' + str(count)
                 time.sleep(0.0001)
@@ -197,17 +201,27 @@ class PClient:
                     ack.append(i)
                     q.append(i)
                     data.append(None)
+                print(q)
                 msg, frm = self.__recv__()
                 msg = str(msg.decode())
                 msg1 = msg.split(' //// ')
                 data[int(msg1[1])] = msg1[0].encode()
                 for i in range(len(data_addr_1)):
+                    if not q:
+                        break
+                    k = q.pop()
+                    fid1 = fid + ' ' + str(k)
+                    self.__send__(fid1.encode(), data_addr_1[i])
+            else:
+                for i in range(len(data_addr_1)):
+                    if not q:
+                        break
                     k = q.pop()
                     fid1 = fid + ' ' + str(k)
                     self.__send__(fid1.encode(), data_addr_1[i])
             while ack:
+                print(self.proxy.port, ack)
                 if time.time() - start >= 2:
-                    print(11111111111)
                     q.clear()
                     for i in range(len(ack)):
                         q.append(ack[i])
@@ -216,21 +230,21 @@ class PClient:
                     msg, frm = self.__recv__(5)
                     msg = str(msg.decode())
                     msg1 = msg.split(' //// ')
-                    print(msg1[1])
                     data[int(msg1[1])] = msg1[0].encode()
 
                     ack.remove(int(msg1[1]))
                     if q:
                         k = q.pop()
                         fid1 = fid + ' ' + str(k)
-                        print(frm)
                         self.__send__(fid1.encode(), frm)
-                    print("\r", end="")
-                    print(self.proxy.port, "Download progress: {}%: ".format(int((stop - (len(ack))) / stop * 100)),
-                          "▋" * (int(((stop - (len(ack))) / stop * 100)) // 2), end="")
-                    sys.stdout.flush()
+                    # print("\r", end="")
+                    # print(self.proxy.port, "Download progress: {}%: ".format(int((stop - (len(ack))) / stop * 100)),
+                    #       "▋" * (int(((stop - (len(ack))) / stop * 100)) // 2), end="")
+                    # sys.stdout.flush()
                 except Exception:
+                    print('timeout')
                     q.clear()
+                    print(ack)
                     for i in range(len(ack)):
                         q.append(ack[i])
                     break
@@ -252,6 +266,10 @@ class PClient:
         """
         End of your code
         """
+
+
+
+
         return data1
 
     def cancel(self, fid):
