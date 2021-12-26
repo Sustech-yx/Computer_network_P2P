@@ -79,7 +79,6 @@ class PClient:
         while 1:
             res = self.getRespond(5, pkg=respond_pkg, dst=dst, timeout=120, fid=fid, frm=dst)
             header = res[0:8].decode()
-
             if header == 'request1':
                 # this means that the peer need package.
                 index = int(res[52:].decode())
@@ -89,6 +88,7 @@ class PClient:
                     index = '0' + index
                 respond_pkg = ('ack1' + fid + 'package_cnt:' + str(index) + 'data:').encode() + data_frag
                 self.__send__(respond_pkg, dst)
+                print(respond_pkg)
                 pass
             elif header == 'request2':
                 # this means that the peer need the file path of the file
@@ -120,56 +120,15 @@ class PClient:
             del address
             self.download_addresses[fid] = addresses
 
-    def __recv_pkg__(self, fid: str, dst: (str, int), index: int, total_peer_cnt=1):
-        request_pkg = 'request0' + fid
-        # request for the information of the file
+    def __recv_pkg__(self, fid: str, dst: (str, int), index: int):
+        request_pkg = 'request1' + fid + 'package_cnt:' + str(index)
         self.__send__(request_pkg.encode(), dst)
-        res = self._getRespond(2, fid=fid, frm=dst)
-        while res is None:
-            self.__send__(request_pkg.encode(), dst)
-            time.sleep(sleep_time)
-            res = self._getRespond(2, fid=fid, frm=dst)
-        pkg_inform = cp(res).decode()
-        pattern = re.compile(r'length:\d+')
-        m = pattern.findall(pkg_inform)
-        file_length = int(m[0][7:])
-        package_cnt = file_length // PClient.pkg_size if file_length % PClient.pkg_size == 0 \
-            else file_length // PClient.pkg_size + 1
-        print(f'package count: {package_cnt}')
-        task = []
-        # arrange the task for each client who has the file. For example, there are 3 clients and the file is
-        # separated into 17 packages:
-        #       A  B  C  D  E
-        # INDEX 0  1  2  3  4
-        # --------------------
-        #       0  1  2  3  4
-        # TASKS 5  6  7  8  9
-        #       10 11 12 13 14
-        #       15 16 17
-        for p in range(package_cnt):
-            if (p + 1) % total_peer_cnt == index:
-                task.append(p)
-        for t in task:
-            request_pkg = 'request1' + fid + 'package_cnt:' + str(t)
-            self.__send__(request_pkg.encode(), dst)
-            res = self.getRespond(3, pkg=request_pkg, dst=dst, timeout=120, fid=fid, cnt=t, frm=dst)
-
+        try:
+            res = self.getRespond(3, pkg=request_pkg, dst=dst, timeout=120, fid=fid, cnt=index, frm=dst)
+            print(res)
             self.processTask(fid, res)
-
-        request_pkg = 'request2' + fid
-        self.__send__(request_pkg.encode(), dst)
-        res = self._getRespond(4, fid=fid, frm=dst)
-        # got the file path of the file. That will lead to the file size of the file, of course.
-        while res is None:
-            self.__send__(request_pkg.encode(), dst)
-            time.sleep(sleep_time)
-            res = self._getRespond(4, fid=fid, frm=dst)
-        res = res[4:]
-        res = res[32:].decode()
-        if fid not in self.fid_file_dict.keys():
-            self.fid_file_dict[fid] = (res, os.path.getsize(res))
-        if debug:
-            print(f'Task from {dst} has complete')
+        except TimeoutError:
+            self.download_progress[fid].append(index)
 
     def __send__(self, data: bytes, dst: (str, int)):
         """
@@ -394,7 +353,7 @@ class PClient:
         :param fid: the unique identification of the expected file, should be the same type of the return value of share()
         :return: the whole received file in bytes
         """
-        self.download_progress[fid] = False
+        self.download_flag[fid] = False
         msg = '101' + fid
         msg = msg.encode()
         self.__send__(msg, self.tracker)
@@ -431,14 +390,17 @@ class PClient:
         for index in range(package_cnt):
             self.download_progress[fid].append(index)
 
-        Thread(target=self.__update_addresses__, args=fid).start()  # this thread is used to update the address table
+        Thread(target=self.__update_addresses__, kwargs={'fid': fid}).start()  # this thread is used to update the address table
 
         while 1:
             receive_threads = []
             for index, peer in enumerate(self.download_addresses[fid]):
+                if len(self.download_progress[fid]) == 0:
+                    break
+                index = self.download_progress[fid].pop()
                 receive_threads.append(Thread(target=self.__recv_pkg__,
                                               kwargs={'fid': fid, 'dst': peer,
-                                                      'index': self.download_progress[fid].pop()}))
+                                                      'index': index}))
             for thread in receive_threads:
                 thread.start()
 
