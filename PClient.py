@@ -10,7 +10,7 @@ from copy import deepcopy as cp
 
 
 class PClient:
-    pkg_size = 32768
+    pkg_size = 65000
 
     def __init__(self, tracker_addr: (str, int), proxy=None, port=None, upload_rate=0, download_rate=0):
         if proxy:
@@ -320,19 +320,34 @@ class PClient:
                             break
                         else:
                             continue
+        elif tp == 7:  # cancel
+            hasRespond = False
+            while not hasRespond:
+                if self.tracker_msg.empty():
+                    continue
+                else:
+                    while 1:
+                        msg, frm = self.tracker_msg.get()
+                        msg = msg.decode()
+                        if msg == 'canSuccess':
+                            hasRespond = True
+                            break
+                        else:
+                            continue
         return msg
 
     def processTask(self, fid, result: str):
-        result = result[4:]
-        result = result[32:]
-        result = result[12:]
+        result = result[4:]  # remove ack1
+        result = result[32:]  # remove fid
+        result = result[12:]  # remove 'package_cnt:'
 
         cnt = int(result[0:6])
 
-        result = result[6:]
+        result = result[6:]  # remove the number
         data = result[5:]
 
-        print(self.port, cnt)
+        if debug:
+            print(self.port, cnt)
         if self.download_buffer[fid] is None:
             self.download_buffer[fid] = []
         self.download_buffer[fid].append((cnt, data))
@@ -412,7 +427,15 @@ class PClient:
         :return: You can design as your need
         """
 
-        pass
+        cancel_pkg = '110' + fid
+        cancel_pkg = cancel_pkg.encode()
+        self.__send__(cancel_pkg, self.tracker)
+        res = self._getRespond(7)
+        while res is None:
+            self.__send__(cancel_pkg, self.tracker)
+            time.sleep(sleep_time)
+            res = self._getRespond(7)
+        print(res)
 
         """
         End of your code

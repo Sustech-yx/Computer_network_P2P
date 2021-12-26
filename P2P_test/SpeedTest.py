@@ -11,6 +11,7 @@ tracker_address = ("127.0.0.1", 10086)
 
 def client_download(client):
     client.download("../test_files/bg.png")
+    client.proxy.close()
 
 
 if __name__ == '__main__':
@@ -67,4 +68,3 @@ if __name__ == '__main__':
         t.join()
     print(f"Time of SC model: {(time.time_ns() - time_start) * 1e-9}")
     server.close()
-    print(threading.enumerate())
