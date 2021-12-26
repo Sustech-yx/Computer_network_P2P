@@ -22,7 +22,9 @@ class PClient:
         self.download_buffer = {}
         # the key is the fid, and the value is a list of tuple, the first element of the
         # is the sequence number, and the second element of the tuple is data.
-        self.download_progress = {}
+        self.download_progress = {}  # comment it for no usage
+        self.download_addresses = {}
+        self.download_flag = {}
         # the key is the fid, and the value is a dict of boolean which specify whether the
         # peer has complete them task
         self.port = self.proxy.port
@@ -56,7 +58,7 @@ class PClient:
                     fid = msg[8:40].decode()
                     if (fid, frm) not in self.sending_thread_id:
                         if debug:
-                            # print(fid, self.fid_file_dict, frm)
+                            print(fid, self.fid_file_dict, frm)
                             pass
                         self.sending_thread_id.append((fid, frm))
                         thread = Thread(target=self.__send_pkg__, args=(fid, frm))
@@ -77,10 +79,7 @@ class PClient:
         while 1:
             res = self.getRespond(5, pkg=respond_pkg, dst=dst, timeout=120, fid=fid, frm=dst)
             header = res[0:8].decode()
-            while res is None:
-                self.__send__(respond_pkg.encode(), dst)
-                time.sleep(sleep_time)
-                res = self.getRespond(5, pkg=respond_pkg, dst=dst, timeout=20, fid=fid, frm=dst)
+
             if header == 'request1':
                 # this means that the peer need package.
                 index = int(res[52:].decode())
@@ -138,15 +137,13 @@ class PClient:
             request_pkg = 'request1' + fid + 'package_cnt:' + str(t)
             self.__send__(request_pkg.encode(), dst)
             res = self.getRespond(3, pkg=request_pkg, dst=dst, timeout=120, fid=fid, cnt=t, frm=dst)
-            while res is None:
-                self.__send__(request_pkg.encode(), dst)
-                res = self.getRespond(3, pkg=request_pkg, dst=dst, timeout=20, fid=fid, cnt=t, frm=dst)
+
             self.processTask(fid, res)
 
         request_pkg = 'request2' + fid
         self.__send__(request_pkg.encode(), dst)
         res = self._getRespond(4, fid=fid, frm=dst)
-        # got the
+        # got the file path of the file. That will lead to the file size of the file, of course.
         while res is None:
             self.__send__(request_pkg.encode(), dst)
             time.sleep(sleep_time)
@@ -276,7 +273,7 @@ class PClient:
                 while 1:
                     msg, frm = self.clients_msg.get()
                     header = msg[0:4].decode()
-                    if (header == 'ack0' or header == 'ack1')\
+                    if (header == 'ack0' or header == 'ack1') \
                             and msg[4:36].decode() == kwargs['fid'] and frm == kwargs['frm']:
                         return None
                     if not header == 'ack2' or frm != kwargs['frm']:
@@ -381,6 +378,7 @@ class PClient:
         :param fid: the unique identification of the expected file, should be the same type of the return value of share()
         :return: the whole received file in bytes
         """
+        self.download_progress[fid] = False
         msg = '101' + fid
         msg = msg.encode()
         self.__send__(msg, self.tracker)
@@ -392,20 +390,58 @@ class PClient:
             t = address.replace(' ', '').replace('(', '').replace(')', '').replace('"', '').split(',')
             addresses.append((str(t[0]), int(t[1])))
         del address
+        # get all the addresses
         num_of_peer = len(addresses)
         self.download_buffer[fid] = []
-        self.download_progress[fid] = {}
+        self.download_addresses[fid] = addresses
+        dst = self.download_addresses[fid][0]
+        request_pkg = 'request0' + fid
+        # request for the information of the file
+        self.__send__(request_pkg.encode(), dst)
+        res = self._getRespond(2, fid=fid, frm=dst)
+        while res is None:
+            self.__send__(request_pkg.encode(), dst)
+            time.sleep(sleep_time)
+            res = self._getRespond(2, fid=fid, frm=dst)
+        pkg_inform = cp(res).decode()
+        pattern = re.compile(r'length:\d+')
+        m = pattern.findall(pkg_inform)
+        file_length = int(m[0][7:])
+        package_cnt = file_length // PClient.pkg_size if file_length % PClient.pkg_size == 0 \
+            else file_length // PClient.pkg_size + 1
+        print(f'package count: {package_cnt}')
+        # obtain the package size of the file
+        self.download_progress[fid] = []
+        for index in range(package_cnt):
+            self.download_progress[fid].append(index)
 
-        receive_threads = []
-        for index, peer in enumerate(addresses):
-            self.download_progress[fid][peer[1]] = False
-            receive_threads.append(Thread(target=self.__recv_pkg__,
-                                          kwargs={'fid': fid, 'dst': peer, 'index': index,
-                                                  'total_peer_cnt': num_of_peer}))
-        for thread in receive_threads:
-            thread.start()
-        for thread in receive_threads:
-            thread.join()
+        while 1:
+            receive_threads = []
+            for index, peer in enumerate(self.download_addresses[fid]):
+                receive_threads.append(Thread(target=self.__recv_pkg__,
+                                              kwargs={'fid': fid, 'dst': peer,
+                                                      'index': self.download_progress[fid].pop()}))
+                for thread in receive_threads:
+                    thread.start()
+
+            if len(self.download_progress[fid]) == 0:
+                if len(list(set(self.download_buffer))) == package_cnt:
+                    self.download_flag[fid] = True
+                    break
+
+        dst = self.download_addresses[fid][0]
+        request_pkg = 'request2' + fid
+        self.__send__(request_pkg.encode(), dst)
+        res = self._getRespond(4, fid=fid, frm=dst)
+        # got the file path of the file. That will lead to the file size of the file, of course.
+        while res is None:
+            self.__send__(request_pkg.encode(), dst)
+            time.sleep(sleep_time)
+            res = self._getRespond(4, fid=fid, frm=dst)
+        res = res[4:]
+        res = res[32:].decode()
+        if fid not in self.fid_file_dict.keys():
+            self.fid_file_dict[fid] = (res, os.path.getsize(res))
 
         data = b''
         self.download_buffer[fid] = list(set(self.download_buffer[fid]))
@@ -418,6 +454,11 @@ class PClient:
 
         del self.download_buffer[fid]
         del self.download_progress[fid]
+        del self.download_flag[fid]
+        del self.download_addresses[fid]
+
+        if debug:
+            print(f'Task from {dst} has complete')
         return data
 
     def cancel(self, fid):
@@ -426,7 +467,6 @@ class PClient:
         :param fid: the unique identification of the file to be canceled register on the Tracker
         :return: You can design as your need
         """
-
         cancel_pkg = '110' + fid
         cancel_pkg = cancel_pkg.encode()
         self.__send__(cancel_pkg, self.tracker)
@@ -436,10 +476,6 @@ class PClient:
             time.sleep(sleep_time)
             res = self._getRespond(7)
         print(res)
-
-        """
-        End of your code
-        """
 
     def close(self):
         """
