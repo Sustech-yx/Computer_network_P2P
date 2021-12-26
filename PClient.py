@@ -421,8 +421,8 @@ class PClient:
                 receive_threads.append(Thread(target=self.__recv_pkg__,
                                               kwargs={'fid': fid, 'dst': peer,
                                                       'index': self.download_progress[fid].pop()}))
-                for thread in receive_threads:
-                    thread.start()
+            for thread in receive_threads:
+                thread.start()
 
             if len(self.download_progress[fid]) == 0:
                 if len(list(set(self.download_buffer))) == package_cnt:
