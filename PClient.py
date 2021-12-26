@@ -1,4 +1,5 @@
 import time
+import sys
 from Proxy import Proxy
 import hashlib
 from threading import Thread
@@ -63,7 +64,7 @@ class PClient:
             except Exception:
                 continue
             # print(count)
-            print("%s:%d ask %s for %s in" % (frm[0], frm[1], self.proxy.port, fid1[0]), count)
+            # print("%s:%d ask %s for %s in" % (frm[0], frm[1], self.proxy.port, fid1[0]), count)
             try:
                 msg = self.fid_addr_dict[fid1[0]]
             except Exception:
@@ -197,6 +198,9 @@ class PClient:
                     break
                 data += msg
                 count += 1
+                print("\r", end="")
+                print(self.proxy.port, "Download progress: {}%: ".format(int(count / stop * 100)), "▋" * (int((count / stop * 100)) // 2), end="")
+                sys.stdout.flush()
 
         self.active = True
         self.tthread = Thread(target=self.transfer_thread)
